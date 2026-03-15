@@ -1,41 +1,74 @@
 import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
+import { useAuth } from '../context/AuthContext';
 import API from '../api/config';
-import { Search, MapPin, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Search, MapPin, CheckCircle, AlertCircle, Filter } from 'lucide-react';
 
 export default function BuyerDashboard() {
+  const { user }              = useAuth();
   const [plotId, setPlotId]   = useState('');
   const [plot, setPlot]       = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
-  const [lat, setLat]         = useState('');
-  const [lon, setLon]         = useState('');
-  const [nearby, setNearby]   = useState(null);
-  const [searching, setSearching] = useState(false);
 
-  const checkPlot = async (e) => {
+  // Location search
+  const [searchForm, setSearchForm] = useState({
+    region: '', department: '', arrondissement: '',
+    locality: '', land_use: '', status: 'APPROVED'
+  });
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching]         = useState(false);
+
+  // Nearby search
+  const [lat, setLat]             = useState('');
+  const [lon, setLon]             = useState('');
+  const [nearby, setNearby]       = useState(null);
+  const [searchingNearby, setSearchingNearby] = useState(false);
+
+  const [activeTab, setActiveTab] = useState('id');
+
+  const checkPlotById = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setPlot(null);
     try {
-      const res = await API.get(`/plots/check/${plotId}/`);
+      const res = await API.get('/plots/check/' + plotId + '/');
       setPlot(res.data);
     } catch {
       setError('Plot not found. Please check the Plot ID and try again.');
     } finally { setLoading(false); }
   };
 
-  const searchNearby = async (e) => {
+  const searchByLocation = async (e) => {
     e.preventDefault();
     setSearching(true);
+    setSearchResults(null);
+    try {
+      var params = new URLSearchParams();
+      if (searchForm.region)         params.append('region', searchForm.region);
+      if (searchForm.department)     params.append('department', searchForm.department);
+      if (searchForm.arrondissement) params.append('arrondissement', searchForm.arrondissement);
+      if (searchForm.locality)       params.append('locality', searchForm.locality);
+      if (searchForm.land_use)       params.append('land_use', searchForm.land_use);
+      if (searchForm.status)         params.append('status', searchForm.status);
+      const res = await API.get('/plots/search/?' + params.toString());
+      setSearchResults(res.data);
+    } catch {
+      setSearchResults({ count: 0, results: [] });
+    } finally { setSearching(false); }
+  };
+
+  const searchNearby = async (e) => {
+    e.preventDefault();
+    setSearchingNearby(true);
     setNearby(null);
     try {
-      const res = await API.get(`/plots/nearby/?lat=${lat}&lon=${lon}&radius=1000`);
+      const res = await API.get('/plots/nearby/?lat=' + lat + '&lon=' + lon + '&radius=1000');
       setNearby(res.data);
     } catch {
       setNearby({ count: 0, plots: [] });
-    } finally { setSearching(false); }
+    } finally { setSearchingNearby(false); }
   };
 
   return (
@@ -43,130 +76,270 @@ export default function BuyerDashboard() {
       <Navbar />
       <div className="max-w-4xl mx-auto px-4 py-8">
 
-        <div className="mb-8">
+        <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Land Verification Portal</h2>
-          <p className="text-gray-500">Check land ownership and verify plot status before buying</p>
+          <p className="text-gray-500">Search and verify land ownership before buying</p>
         </div>
 
-        {/* Plot Check */}
-        <div className="bg-white rounded-xl shadow p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <Search size={20} className="text-primary" />
-            Check Plot by ID
-          </h3>
-          <form onSubmit={checkPlot} className="flex gap-3">
-            <input
-              type="text"
-              value={plotId}
-              onChange={e => setPlotId(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder="Enter Plot ID e.g. CM-CE-YDE-831059"
-              required
-            />
-            <button type="submit" disabled={loading}
-              className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50">
-              {loading ? 'Checking...' : 'Check'}
-            </button>
-          </form>
-
-          {error && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
-              <AlertCircle size={18} className="text-red-500" />
-              <span className="text-red-600">{error}</span>
-            </div>
-          )}
-
-          {plot && (
-            <div className="mt-6 border border-gray-200 rounded-xl overflow-hidden">
-              <div className={`p-4 ${plot.is_verified ? 'bg-green-500' : 'bg-yellow-500'} text-white`}>
-                <div className="flex items-center gap-2">
-                  {plot.is_verified
-                    ? <CheckCircle size={24} />
-                    : <AlertCircle size={24} />}
-                  <div>
-                    <p className="font-bold text-lg">{plot.is_verified ? 'VERIFIED PLOT' : 'UNVERIFIED PLOT'}</p>
-                    <p className="text-sm opacity-90">{plot.plot_id}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4 grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Current Owner</p>
-                  <p className="font-semibold text-gray-800">{plot.owner}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Status</p>
-                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                    plot.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                    plot.status === 'SOLD'     ? 'bg-blue-100 text-blue-700' :
-                    'bg-yellow-100 text-yellow-700'}`}>
-                    {plot.status}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Location</p>
-                  <p className="font-semibold text-gray-800">{plot.locality}, {plot.city}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Area</p>
-                  <p className="font-semibold text-gray-800">{plot.area_sqm} m²</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Land Use</p>
-                  <p className="font-semibold text-gray-800">{plot.land_use}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Title Number</p>
-                  <p className="font-semibold text-gray-800">{plot.title_number || 'Not yet issued'}</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Nearby Search */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <MapPin size={20} className="text-primary" />
-            Find Nearby Plots
-          </h3>
-          <p className="text-sm text-gray-500 mb-4">Enter your current GPS coordinates to find registered plots within 1km</p>
-          <form onSubmit={searchNearby} className="grid grid-cols-2 gap-3 mb-4">
-            <input type="number" step="any" value={lat} onChange={e => setLat(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder="Latitude e.g. 3.8481" required />
-            <input type="number" step="any" value={lon} onChange={e => setLon(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder="Longitude e.g. 11.5019" required />
-            <button type="submit" disabled={searching}
-              className="col-span-2 bg-primary text-white py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50">
-              {searching ? 'Searching...' : 'Search Nearby Plots'}
-            </button>
-          </form>
-
-          {nearby && (
+        {/* Verification status banner */}
+        {!user.is_verified && (
+          <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-4 mb-6 flex items-start gap-3">
+            <AlertCircle size={20} className="text-yellow-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-3">
-                Found {nearby.count} plot(s) within 1km
+              <p className="text-yellow-800 font-medium">Account Not Yet Verified</p>
+              <p className="text-yellow-700 text-sm mt-1">
+                You can search and check land plots, but you cannot initiate purchases until your account
+                is verified. Please visit your nearest Land Registry office with your original CNI.
               </p>
-              {nearby.plots.map((p, i) => (
-                <div key={i} className="border border-gray-200 rounded-lg p-4 mb-3">
-                  <div className="flex justify-between items-start">
+            </div>
+          </div>
+        )}
+
+        {user.is_verified && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <CheckCircle size={20} className="text-green-600" />
+            <p className="text-green-800 font-medium">Account Verified — You can search and purchase land</p>
+          </div>
+        )}
+
+        {/* Search Tabs */}
+        <div className="flex gap-2 mb-6">
+          {[
+            { key: 'id',       label: 'Search by Plot ID' },
+            { key: 'location', label: 'Search by Location' },
+            { key: 'nearby',   label: 'Nearby Plots' },
+          ].map(function(tab) {
+            return (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                className={'px-4 py-2 rounded-lg font-medium text-sm transition ' + (activeTab === tab.key ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100')}>
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search by Plot ID */}
+        {activeTab === 'id' && (
+          <div className="bg-white rounded-xl shadow p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Search size={20} className="text-primary" />
+              Check Plot by ID
+            </h3>
+            <form onSubmit={checkPlotById} className="flex gap-3">
+              <input type="text" value={plotId} onChange={e => setPlotId(e.target.value)}
+                className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                placeholder="e.g. CM-CE-MFOUNDI-YDE-1-793790" required />
+              <button type="submit" disabled={loading}
+                className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50">
+                {loading ? 'Checking...' : 'Check'}
+              </button>
+            </form>
+
+            {error && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
+                <AlertCircle size={18} className="text-red-500" />
+                <span className="text-red-600">{error}</span>
+              </div>
+            )}
+
+            {plot && (
+              <div className="mt-6 border border-gray-200 rounded-xl overflow-hidden">
+                <div className={'p-4 text-white ' + (plot.is_verified ? 'bg-green-500' : 'bg-yellow-500')}>
+                  <div className="flex items-center gap-2">
+                    {plot.is_verified ? <CheckCircle size={24} /> : <AlertCircle size={24} />}
                     <div>
-                      <p className="font-mono font-bold text-primary">{p.plot_id}</p>
-                      <p className="text-sm text-gray-600">{p.locality}, {p.city}</p>
-                      <p className="text-sm text-gray-500">Owner: {p.owner} • {p.area_sqm} m²</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">{p.status}</span>
-                      <p className="text-xs text-gray-400 mt-1">{p.distance_m}m away</p>
+                      <p className="font-bold text-lg">{plot.is_verified ? 'VERIFIED PLOT' : 'UNVERIFIED PLOT'}</p>
+                      <p className="text-sm opacity-90">{plot.plot_id}</p>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <div className="p-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Current Owner</p>
+                    <p className="font-semibold text-gray-800">{plot.owner}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Status</p>
+                    <span className={'inline-block px-3 py-1 rounded-full text-sm font-medium ' + (
+                      plot.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                      plot.status === 'SOLD'     ? 'bg-blue-100 text-blue-700' :
+                      'bg-yellow-100 text-yellow-700')}>
+                      {plot.status}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Full Location</p>
+                    <p className="font-semibold text-gray-800">{plot.full_location}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Area</p>
+                    <p className="font-semibold text-gray-800">{plot.area_sqm} m²</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Land Use</p>
+                    <p className="font-semibold text-gray-800">{plot.land_use}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Title Number</p>
+                    <p className="font-semibold text-gray-800">{plot.title_number || 'Not yet issued'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Search by Location */}
+        {activeTab === 'location' && (
+          <div className="bg-white rounded-xl shadow p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Filter size={20} className="text-primary" />
+              Search by Location
+            </h3>
+            <form onSubmit={searchByLocation} className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                <input type="text" value={searchForm.region}
+                  onChange={e => setSearchForm({...searchForm, region: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                  placeholder="e.g. Centre" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <input type="text" value={searchForm.department}
+                  onChange={e => setSearchForm({...searchForm, department: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                  placeholder="e.g. Mfoundi" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Arrondissement</label>
+                <input type="text" value={searchForm.arrondissement}
+                  onChange={e => setSearchForm({...searchForm, arrondissement: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                  placeholder="e.g. Yaounde I" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Locality / Quarter</label>
+                <input type="text" value={searchForm.locality}
+                  onChange={e => setSearchForm({...searchForm, locality: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                  placeholder="e.g. Bastos" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Land Use</label>
+                <select value={searchForm.land_use}
+                  onChange={e => setSearchForm({...searchForm, land_use: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                  <option value="">All Types</option>
+                  <option value="RESIDENTIAL">Residential</option>
+                  <option value="COMMERCIAL">Commercial</option>
+                  <option value="AGRICULTURAL">Agricultural</option>
+                  <option value="INDUSTRIAL">Industrial</option>
+                  <option value="MIXED">Mixed Use</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select value={searchForm.status}
+                  onChange={e => setSearchForm({...searchForm, status: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                  <option value="">All</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="SOLD">Sold</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <button type="submit" disabled={searching}
+                  className="w-full bg-primary text-white py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50 font-medium">
+                  {searching ? 'Searching...' : 'Search Plots'}
+                </button>
+              </div>
+            </form>
+
+            {searchResults && (
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-3">
+                  Found {searchResults.count} plot(s)
+                </p>
+                {searchResults.results && searchResults.results.map(function(p, i) {
+                  return (
+                    <div key={i} className="border border-gray-200 rounded-lg p-4 mb-3 hover:border-primary transition">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-mono font-bold text-primary text-sm">{p.plot_id}</p>
+                          <p className="text-sm text-gray-600 mt-1">{p.full_location}</p>
+                          <p className="text-sm text-gray-500">Owner: {p.owner}</p>
+                          <p className="text-sm text-gray-500">{p.area_sqm} m² • {p.land_use}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={'px-2 py-1 rounded-full text-xs font-medium ' + (
+                            p.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                            p.status === 'SOLD'     ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700')}>
+                            {p.status}
+                          </span>
+                          {p.title_number && (
+                            <p className="text-xs text-gray-400 mt-1">{p.title_number}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Nearby Plots */}
+        {activeTab === 'nearby' && (
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <MapPin size={20} className="text-primary" />
+              Find Nearby Plots
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Enter your GPS coordinates to find registered plots within 1km
+            </p>
+            <form onSubmit={searchNearby} className="grid grid-cols-2 gap-3 mb-4">
+              <input type="number" step="any" value={lat} onChange={e => setLat(e.target.value)}
+                className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                placeholder="Latitude e.g. 3.8481" required />
+              <input type="number" step="any" value={lon} onChange={e => setLon(e.target.value)}
+                className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                placeholder="Longitude e.g. 11.5019" required />
+              <button type="submit" disabled={searchingNearby}
+                className="col-span-2 bg-primary text-white py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50">
+                {searchingNearby ? 'Searching...' : 'Search Nearby Plots'}
+              </button>
+            </form>
+
+            {nearby && (
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-3">
+                  Found {nearby.count} plot(s) within 1km
+                </p>
+                {nearby.plots && nearby.plots.map(function(p, i) {
+                  return (
+                    <div key={i} className="border border-gray-200 rounded-lg p-4 mb-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-mono font-bold text-primary text-sm">{p.plot_id}</p>
+                          <p className="text-sm text-gray-600">{p.full_location || (p.locality + ', ' + p.city)}</p>
+                          <p className="text-sm text-gray-500">Owner: {p.owner} • {p.area_sqm} m²</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">{p.status}</span>
+                          <p className="text-xs text-gray-400 mt-1">{p.distance_m}m away</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

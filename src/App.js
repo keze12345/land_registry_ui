@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import SurveyorDashboard from './pages/SurveyorDashboard';
 import OfficialDashboard from './pages/OfficialDashboard';
 import BuyerDashboard from './pages/BuyerDashboard';
@@ -27,7 +28,8 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login"    element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/surveyor" element={
             <ProtectedRoute roles={['SURVEYOR']}>
               <SurveyorDashboard />
