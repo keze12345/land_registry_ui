@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
+import PlotDetailModal from '../components/PlotDetailModal';
 import { useAuth } from '../context/AuthContext';
 import API from '../api/config';
-import { MapPin, Clock, TrendingUp, Tag, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin, Clock, TrendingUp, AlertCircle } from 'lucide-react';
 
 export default function Marketplace() {
   const { user }                    = useAuth();
   const [listings, setListings]     = useState([]);
   const [loading, setLoading]       = useState(true);
   const [selectedListing, setSelectedListing] = useState(null);
+  const [biddingListing, setBiddingListing]   = useState(null);
   const [bidAmount, setBidAmount]   = useState('');
   const [bidMessage, setBidMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +33,13 @@ export default function Marketplace() {
     finally { setLoading(false); }
   };
 
+  const openBidForm = (listing) => {
+    setSelectedListing(null);
+    setBiddingListing(listing);
+    setBidAmount(listing.sale_type === 'FIXED' ? listing.asking_price : '');
+    setBidMessage('');
+  };
+
   const placeBid = async (e) => {
     e.preventDefault();
     if (!user.is_verified) {
@@ -40,8 +49,8 @@ export default function Marketplace() {
     setSubmitting(true);
     setMessage('');
     try {
-      const res = await API.post('/listings/' + selectedListing.listing_ref + '/bid/', {
-        listing: selectedListing.id,
+      const res = await API.post('/listings/' + biddingListing.listing_ref + '/bid/', {
+        listing: biddingListing.id,
         amount:  bidAmount,
         currency: 'XAF',
         message: bidMessage
@@ -49,13 +58,12 @@ export default function Marketplace() {
       setMessage('Bid placed successfully! Ref: ' + res.data.bid.bid_ref);
       setBidAmount('');
       setBidMessage('');
-      setSelectedListing(null);
+      setBiddingListing(null);
       fetchListings();
     } catch (err) {
-      const data = err.response && err.response.data;
+      var data = err.response && err.response.data;
       if (data) {
-        const msgs = Object.values(data).flat().join(' ');
-        setMessage(msgs);
+        setMessage(Object.values(data).flat().join(' '));
       } else {
         setMessage('Error placing bid. Please try again.');
       }
@@ -67,9 +75,9 @@ export default function Marketplace() {
   };
 
   const daysLeft = (deadline) => {
-    const now  = new Date();
-    const end  = new Date(deadline);
-    const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+    var now  = new Date();
+    var end  = new Date(deadline);
+    var diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
     return diff > 0 ? diff + ' days left' : 'Expired';
   };
 
@@ -80,23 +88,23 @@ export default function Marketplace() {
 
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-800">Land Marketplace</h2>
-          <p className="text-gray-500">Browse available plots for sale across Cameroon</p>
+          <p className="text-gray-500">Browse available plots — click any plot to view its site plan before buying</p>
         </div>
 
         {!user.is_verified && (
           <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-4 mb-6 flex items-start gap-3">
             <AlertCircle size={20} className="text-yellow-600 flex-shrink-0 mt-0.5" />
             <p className="text-yellow-800 text-sm">
-              Your account is not verified. You can browse listings but cannot place bids until
-              you visit a Land Registry office with your CNI.
+              Your account is not verified. You can browse and view site plans but cannot place bids
+              until you visit a Land Registry office with your CNI.
             </p>
           </div>
         )}
 
         {message && (
-          <div className={'p-4 rounded-lg mb-6 border ' + (message.includes('success') || message.includes('successfully') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200')}>
+          <div className={'p-4 rounded-lg mb-6 border ' + (message.includes('success') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200')}>
             {message}
-            <button onClick={() => setMessage('')} className="float-right text-gray-400">x</button>
+            <button onClick={() => setMessage('')} className="float-right">x</button>
           </div>
         )}
 
@@ -142,8 +150,10 @@ export default function Marketplace() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {listings.map(function(listing) {
               return (
-                <div key={listing.id} className="bg-white rounded-xl shadow hover:shadow-lg transition overflow-hidden">
-                  {/* Header */}
+                <div key={listing.id}
+                  className="bg-white rounded-xl shadow hover:shadow-lg transition overflow-hidden cursor-pointer"
+                  onClick={() => setSelectedListing(listing)}>
+
                   <div className={'p-4 ' + (listing.sale_type === 'AUCTION' ? 'bg-gradient-to-r from-purple-600 to-blue-600' : 'bg-gradient-to-r from-primary to-secondary')}>
                     <div className="flex justify-between items-start">
                       <div>
@@ -158,7 +168,6 @@ export default function Marketplace() {
                     </div>
                   </div>
 
-                  {/* Body */}
                   <div className="p-4">
                     <div className="flex items-center gap-1 text-gray-500 text-sm mb-2">
                       <MapPin size={14} />
@@ -204,11 +213,9 @@ export default function Marketplace() {
 
                     <div className="flex justify-between items-center">
                       <p className="text-xs text-gray-400">Seller: {listing.seller_name}</p>
-                      <button
-                        onClick={() => setSelectedListing(listing)}
-                        className={'px-4 py-2 rounded-lg text-sm font-medium transition ' + (user.is_verified ? 'bg-primary text-white hover:bg-secondary' : 'bg-gray-100 text-gray-400 cursor-not-allowed')}>
-                        {listing.sale_type === 'AUCTION' ? 'Place Bid' : 'Buy Now'}
-                      </button>
+                      <span className="text-primary text-sm font-medium hover:underline">
+                        View Site Plan →
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -217,26 +224,36 @@ export default function Marketplace() {
           </div>
         )}
 
-        {/* Bid Modal */}
+        {/* Plot Detail Modal with Site Plan */}
         {selectedListing && (
+          <PlotDetailModal
+            listing={selectedListing}
+            onClose={() => setSelectedListing(null)}
+            onBid={openBidForm}
+            user={user}
+          />
+        )}
+
+        {/* Bid Form Modal */}
+        {biddingListing && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
               <h3 className="text-lg font-bold text-gray-800 mb-2">
-                {selectedListing.sale_type === 'AUCTION' ? 'Place a Bid' : 'Purchase Request'}
+                {biddingListing.sale_type === 'AUCTION' ? 'Place a Bid' : 'Purchase Request'}
               </h3>
 
               <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                <p className="font-mono text-sm font-medium text-primary">{selectedListing.plot_details && selectedListing.plot_details.plot_id}</p>
-                <p className="text-sm text-gray-600">{selectedListing.plot_details && selectedListing.plot_details.full_location}</p>
-                <p className="text-sm text-gray-500">{selectedListing.plot_details && selectedListing.plot_details.area_sqm} m² • {selectedListing.plot_details && selectedListing.plot_details.land_use}</p>
-                {selectedListing.sale_type === 'AUCTION' && (
+                <p className="font-mono text-sm font-medium text-primary">{biddingListing.plot_details && biddingListing.plot_details.plot_id}</p>
+                <p className="text-sm text-gray-600">{biddingListing.plot_details && biddingListing.plot_details.full_location}</p>
+                <p className="text-sm text-gray-500">{biddingListing.plot_details && biddingListing.plot_details.area_sqm} m²</p>
+                {biddingListing.sale_type === 'AUCTION' && (
                   <p className="text-sm text-purple-600 font-medium mt-1">
-                    Minimum bid: {formatPrice(selectedListing.minimum_bid)}
+                    Minimum bid: {formatPrice(biddingListing.minimum_bid)}
                   </p>
                 )}
-                {selectedListing.sale_type === 'FIXED' && (
+                {biddingListing.sale_type === 'FIXED' && (
                   <p className="text-sm text-green-600 font-medium mt-1">
-                    Asking price: {formatPrice(selectedListing.asking_price)}
+                    Asking price: {formatPrice(biddingListing.asking_price)}
                   </p>
                 )}
               </div>
@@ -244,13 +261,13 @@ export default function Marketplace() {
               <form onSubmit={placeBid} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {selectedListing.sale_type === 'AUCTION' ? 'Your Bid Amount (XAF)' : 'Offered Amount (XAF)'}
+                    {biddingListing.sale_type === 'AUCTION' ? 'Your Bid Amount (XAF)' : 'Offered Amount (XAF)'}
                   </label>
                   <input type="number" value={bidAmount}
                     onChange={e => setBidAmount(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-                    placeholder={selectedListing.sale_type === 'AUCTION' ? 'Enter your bid amount' : 'Enter offered amount'}
-                    min={selectedListing.minimum_bid || selectedListing.asking_price}
+                    placeholder="Enter amount"
+                    min={biddingListing.minimum_bid || biddingListing.asking_price}
                     required />
                 </div>
                 <div>
@@ -259,14 +276,14 @@ export default function Marketplace() {
                     onChange={e => setBidMessage(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
                     rows={3}
-                    placeholder="Introduce yourself and explain your interest..." />
+                    placeholder="Introduce yourself..." />
                 </div>
                 <div className="flex gap-3">
                   <button type="submit" disabled={submitting}
                     className="flex-1 bg-primary text-white py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50 font-medium">
-                    {submitting ? 'Submitting...' : selectedListing.sale_type === 'AUCTION' ? 'Submit Bid' : 'Submit Request'}
+                    {submitting ? 'Submitting...' : biddingListing.sale_type === 'AUCTION' ? 'Submit Bid' : 'Submit Request'}
                   </button>
-                  <button type="button" onClick={() => setSelectedListing(null)}
+                  <button type="button" onClick={() => setBiddingListing(null)}
                     className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition">
                     Cancel
                   </button>
