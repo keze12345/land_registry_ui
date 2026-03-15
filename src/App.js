@@ -7,6 +7,8 @@ import SurveyorDashboard from './pages/SurveyorDashboard';
 import OfficialDashboard from './pages/OfficialDashboard';
 import BuyerDashboard from './pages/BuyerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import Marketplace from './pages/Marketplace';
+import SellerDashboard from './pages/SellerDashboard';
 
 const ProtectedRoute = ({ children, roles }) => {
   const { user, loading } = useAuth();
@@ -28,29 +30,15 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login"    element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/surveyor" element={
-            <ProtectedRoute roles={['SURVEYOR']}>
-              <SurveyorDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/official" element={
-            <ProtectedRoute roles={['GOV_OFFICIAL']}>
-              <OfficialDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/buyer" element={
-            <ProtectedRoute roles={['BUYER']}>
-              <BuyerDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin" element={
-            <ProtectedRoute roles={['ADMIN']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="*" element={<Navigate to="/login" />} />
+          <Route path="/login"       element={<Login />} />
+          <Route path="/register"    element={<Register />} />
+          <Route path="/surveyor"    element={<ProtectedRoute roles={['SURVEYOR']}><SurveyorDashboard /></ProtectedRoute>} />
+          <Route path="/official"    element={<ProtectedRoute roles={['GOV_OFFICIAL']}><OfficialDashboard /></ProtectedRoute>} />
+          <Route path="/buyer"       element={<ProtectedRoute roles={['BUYER']}><BuyerDashboard /></ProtectedRoute>} />
+          <Route path="/seller"      element={<ProtectedRoute roles={['BUYER']}><SellerDashboard /></ProtectedRoute>} />
+          <Route path="/marketplace" element={<ProtectedRoute roles={['BUYER']}><Marketplace /></ProtectedRoute>} />
+          <Route path="/admin"       element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="*"            element={<Navigate to="/login" />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
