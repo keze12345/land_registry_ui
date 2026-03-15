@@ -2,23 +2,31 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import LocationSelector from '../components/LocationSelector';
 import PlotMap from '../components/PlotMap';
+import MapBoundaryPicker from '../components/MapBoundaryPicker';
 import API from '../api/config';
-import { Plus, Map, List } from 'lucide-react';
+import { Plus, Map, List, MapPin } from 'lucide-react';
 
 export default function SurveyorDashboard() {
   const [plots, setPlots]           = useState([]);
+  const [buyers, setBuyers]         = useState([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
   const [viewMode, setViewMode]     = useState('table');
+  const [inputMode, setInputMode]   = useState('map');
   const [location, setLocation]     = useState({});
+  const [boundaryPoints, setBoundaryPoints] = useState([]);
   const [form, setForm]             = useState({
     owner: '', address: '', area_sqm: '',
     land_use: 'RESIDENTIAL', description: '', points: ''
   });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage]       = useState('');
+  const [errors, setErrors]         = useState({});
 
-  useEffect(() => { fetchPlots(); }, []);
+  useEffect(() => {
+    fetchPlots();
+    fetchBuyers();
+  }, []);
 
   const fetchPlots = async () => {
     try {
@@ -28,33 +36,62 @@ export default function SurveyorDashboard() {
     finally { setLoading(false); }
   };
 
+  const fetchBuyers = async () => {
+    try {
+      const res = await API.get('/accounts/users/?role=BUYER');
+      setBuyers(res.data.results || []);
+    } catch {}
+  };
+
+  const getPoints = () => {
+    if (inputMode === 'map') return boundaryPoints;
+    var points = [];
+    var lines = form.points.trim().split('\n');
+    lines.forEach(function(line, i) {
+      var parts = line.split(',');
+      if (parts.length >= 2) {
+        points.push({
+          label:     String.fromCharCode(65 + i),
+          latitude:  parseFloat(parts[0].trim()),
+          longitude: parseFloat(parts[1].trim())
+        });
+      }
+    });
+    return points;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setMessage('');
+    setErrors({});
+
+    var newErrors = {};
+
+    if (!form.owner) {
+      newErrors.owner = 'Please select the plot owner';
+    }
+    if (!location.region || !location.department || !location.arrondissement) {
+      newErrors.location = 'Please select Region, Department and Arrondissement';
+    }
+    if (!form.area_sqm) {
+      newErrors.area_sqm = 'Please enter the plot area';
+    }
+
+    var points = getPoints();
+    if (points.length < 3) {
+      newErrors.points = inputMode === 'map'
+        ? 'Please click at least 3 boundary points on the map'
+        : 'Please enter at least 3 boundary points';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      if (!location.region || !location.department || !location.arrondissement) {
-        setMessage('Please select Region, Department and Arrondissement');
-        setSubmitting(false);
-        return;
-      }
-      let points = [];
-      const lines = form.points.trim().split('\n');
-      lines.forEach((line, i) => {
-        const parts = line.split(',');
-        if (parts.length >= 2) {
-          points.push({
-            label:     String.fromCharCode(65 + i),
-            latitude:  parseFloat(parts[0].trim()),
-            longitude: parseFloat(parts[1].trim())
-          });
-        }
-      });
-      if (points.length < 3) {
-        setMessage('Please enter at least 3 boundary points');
-        setSubmitting(false);
-        return;
-      }
       await API.post('/plots/', {
         owner:          parseInt(form.owner),
         region:         parseInt(location.region),
@@ -65,14 +102,28 @@ export default function SurveyorDashboard() {
         area_sqm:       form.area_sqm,
         land_use:       form.land_use,
         description:    form.description,
-        points
+        points:         points
       });
       setMessage('Plot registered successfully!');
       setShowForm(false);
       setForm({ owner: '', address: '', area_sqm: '', land_use: 'RESIDENTIAL', description: '', points: '' });
+      setBoundaryPoints([]);
       fetchPlots();
     } catch (err) {
-      setMessage(err.response?.data ? JSON.stringify(err.response.data) : 'Error registering plot');
+      if (err.response && err.response.data) {
+        var data = err.response.data;
+        var fieldErrors = {};
+        Object.keys(data).forEach(function(key) {
+          var msgs = Array.isArray(data[key]) ? data[key].join(', ') : data[key];
+          if (key === 'owner')          fieldErrors.owner    = 'Invalid owner selected. Please choose a valid buyer.';
+          else if (key === 'points')    fieldErrors.points   = msgs;
+          else if (key === 'boundary')  fieldErrors.points   = 'Invalid boundary points. Please re-mark the boundaries.';
+          else                          fieldErrors.general  = msgs;
+        });
+        setErrors(fieldErrors);
+      } else {
+        setErrors({ general: 'Something went wrong. Please try again.' });
+      }
     } finally { setSubmitting(false); }
   };
 
@@ -80,6 +131,7 @@ export default function SurveyorDashboard() {
     if (status === 'APPROVED') return 'bg-green-100 text-green-700';
     if (status === 'REJECTED') return 'bg-red-100 text-red-700';
     if (status === 'SOLD')     return 'bg-blue-100 text-blue-700';
+    if (status === 'LISTED')   return 'bg-purple-100 text-purple-700';
     return 'bg-yellow-100 text-yellow-700';
   };
 
@@ -88,7 +140,6 @@ export default function SurveyorDashboard() {
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-8">
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">Surveyor Dashboard</h2>
@@ -101,10 +152,16 @@ export default function SurveyorDashboard() {
           </button>
         </div>
 
-        {/* Message */}
         {message && (
-          <div className={`p-4 rounded-lg mb-6 border ${message.includes('success') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-            {message}
+          <div className="p-4 rounded-lg mb-6 border bg-green-50 text-green-700 border-green-200">
+            ✓ {message}
+            <button onClick={() => setMessage('')} className="float-right text-gray-400">x</button>
+          </div>
+        )}
+
+        {errors.general && (
+          <div className="p-4 rounded-lg mb-6 border bg-red-50 text-red-700 border-red-200">
+            ⚠ {errors.general}
           </div>
         )}
 
@@ -116,32 +173,69 @@ export default function SurveyorDashboard() {
               Register New Land Plot
             </h3>
             <form onSubmit={handleSubmit} className="space-y-6">
+
+              {/* Administrative Location */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-600 uppercase mb-3 border-b pb-2">
                   Administrative Location
                 </h4>
                 <LocationSelector onChange={setLocation} />
+                {errors.location && (
+                  <p className="text-red-500 text-sm mt-2">⚠ {errors.location}</p>
+                )}
               </div>
+
+              {/* Plot Details */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-600 uppercase mb-3 border-b pb-2">
                   Plot Details
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {/* Owner Dropdown */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Owner User ID</label>
-                    <input type="number" value={form.owner} onChange={e => setForm({...form, owner: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-                      placeholder="Enter owner user ID" required />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Plot Owner <span className="text-red-500">*</span>
+                    </label>
+                    <select value={form.owner}
+                      onChange={e => setForm({...form, owner: e.target.value})}
+                      className={'w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ' + (errors.owner ? 'border-red-400 bg-red-50' : 'border-gray-300')}>
+                      <option value="">-- Select plot owner --</option>
+                      {buyers.map(function(buyer) {
+                        return (
+                          <option key={buyer.id} value={buyer.id}>
+                            {buyer.full_name} — {buyer.email} {buyer.is_verified ? '✓ Verified' : '(Unverified)'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {errors.owner && (
+                      <p className="text-red-500 text-xs mt-1">⚠ {errors.owner}</p>
+                    )}
+                    {buyers.length === 0 && (
+                      <p className="text-yellow-600 text-xs mt-1">⚠ No buyers registered yet</p>
+                    )}
                   </div>
+
+                  {/* Area */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Area (m²)</label>
-                    <input type="number" value={form.area_sqm} onChange={e => setForm({...form, area_sqm: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-                      placeholder="e.g. 600" required />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Area (m²) <span className="text-red-500">*</span>
+                    </label>
+                    <input type="number" value={form.area_sqm}
+                      onChange={e => setForm({...form, area_sqm: e.target.value})}
+                      className={'w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ' + (errors.area_sqm ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+                      placeholder="e.g. 600" />
+                    {errors.area_sqm && (
+                      <p className="text-red-500 text-xs mt-1">⚠ {errors.area_sqm}</p>
+                    )}
                   </div>
+
+                  {/* Land Use */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Land Use</label>
-                    <select value={form.land_use} onChange={e => setForm({...form, land_use: e.target.value})}
+                    <select value={form.land_use}
+                      onChange={e => setForm({...form, land_use: e.target.value})}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
                       <option value="RESIDENTIAL">Residential</option>
                       <option value="COMMERCIAL">Commercial</option>
@@ -150,37 +244,69 @@ export default function SurveyorDashboard() {
                       <option value="MIXED">Mixed Use</option>
                     </select>
                   </div>
+
+                  {/* Address */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <input type="text" value={form.address} onChange={e => setForm({...form, address: e.target.value})}
+                    <input type="text" value={form.address}
+                      onChange={e => setForm({...form, address: e.target.value})}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
                       placeholder="Full street address" />
                   </div>
+
+                  {/* Description */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <input type="text" value={form.description} onChange={e => setForm({...form, description: e.target.value})}
+                    <input type="text" value={form.description}
+                      onChange={e => setForm({...form, description: e.target.value})}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
                       placeholder="Brief description of the plot" />
                   </div>
                 </div>
               </div>
+
+              {/* GPS Boundary Points */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-600 uppercase mb-3 border-b pb-2">
-                  GPS Boundary Points
+                  GPS Boundary Points <span className="text-red-500">*</span>
                 </h4>
-                <textarea value={form.points} onChange={e => setForm({...form, points: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
-                  rows={6}
-                  placeholder={"3.8481, 11.5019\n3.8482, 11.5021\n3.8479, 11.5022\n3.8478, 11.5020"}
-                  required />
-                <p className="text-xs text-gray-400 mt-1">Minimum 3 points. Format: latitude, longitude</p>
+
+                <div className="flex gap-2 mb-4">
+                  <button type="button" onClick={() => setInputMode('map')}
+                    className={'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ' + (inputMode === 'map' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                    <MapPin size={16} /> Click on Map
+                  </button>
+                  <button type="button" onClick={() => setInputMode('manual')}
+                    className={'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ' + (inputMode === 'manual' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                    ⌨ Type Coordinates
+                  </button>
+                </div>
+
+                {inputMode === 'map' ? (
+                  <MapBoundaryPicker
+                    points={boundaryPoints}
+                    onChange={setBoundaryPoints}
+                    center={[3.848, 11.502]}
+                  />
+                ) : (
+                  <textarea value={form.points}
+                    onChange={e => setForm({...form, points: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+                    rows={6}
+                    placeholder={"3.8481, 11.5019\n3.8482, 11.5021\n3.8479, 11.5022\n3.8478, 11.5020"} />
+                )}
+
+                {errors.points && (
+                  <p className="text-red-500 text-sm mt-2">⚠ {errors.points}</p>
+                )}
               </div>
+
               <div className="flex gap-3">
                 <button type="submit" disabled={submitting}
                   className="bg-primary text-white px-8 py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50 font-medium">
                   {submitting ? 'Registering...' : 'Register Plot'}
                 </button>
-                <button type="button" onClick={() => setShowForm(false)}
+                <button type="button" onClick={() => { setShowForm(false); setBoundaryPoints([]); setErrors({}); }}
                   className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-200 transition">
                   Cancel
                 </button>
@@ -192,31 +318,32 @@ export default function SurveyorDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Total Plots',  value: plots.length,                                      color: 'bg-blue-50 text-blue-700' },
-            { label: 'Pending',      value: plots.filter(p => p.status === 'PENDING').length,  color: 'bg-yellow-50 text-yellow-700' },
-            { label: 'Approved',     value: plots.filter(p => p.status === 'APPROVED').length, color: 'bg-green-50 text-green-700' },
-            { label: 'Sold',         value: plots.filter(p => p.status === 'SOLD').length,     color: 'bg-purple-50 text-purple-700' },
-          ].map((stat, i) => (
-            <div key={i} className={`${stat.color} rounded-xl p-4 text-center`}>
-              <p className="text-3xl font-bold">{stat.value}</p>
-              <p className="text-sm font-medium mt-1">{stat.label}</p>
-            </div>
-          ))}
+            { label: 'Total Plots',  value: plots.length,                                                              color: 'bg-blue-50 text-blue-700' },
+            { label: 'Pending',      value: plots.filter(function(p) { return p.status === 'PENDING'; }).length,      color: 'bg-yellow-50 text-yellow-700' },
+            { label: 'Approved',     value: plots.filter(function(p) { return p.status === 'APPROVED'; }).length,     color: 'bg-green-50 text-green-700' },
+            { label: 'Sold',         value: plots.filter(function(p) { return p.status === 'SOLD'; }).length,         color: 'bg-purple-50 text-purple-700' },
+          ].map(function(stat, i) {
+            return (
+              <div key={i} className={stat.color + ' rounded-xl p-4 text-center'}>
+                <p className="text-3xl font-bold">{stat.value}</p>
+                <p className="text-sm font-medium mt-1">{stat.label}</p>
+              </div>
+            );
+          })}
         </div>
 
         {/* View Toggle */}
         <div className="flex gap-2 mb-4">
           <button onClick={() => setViewMode('table')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${viewMode === 'table' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+            className={'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ' + (viewMode === 'table' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100')}>
             <List size={16} /> Table View
           </button>
           <button onClick={() => setViewMode('map')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${viewMode === 'map' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+            className={'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ' + (viewMode === 'map' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100')}>
             <Map size={16} /> Map View
           </button>
         </div>
 
-        {/* Map View */}
         {viewMode === 'map' && (
           <div className="bg-white rounded-xl shadow p-4 mb-6">
             <h3 className="font-semibold text-gray-800 mb-4">Plot Boundaries Map</h3>
@@ -230,7 +357,6 @@ export default function SurveyorDashboard() {
           </div>
         )}
 
-        {/* Table View */}
         {viewMode === 'table' && (
           <div className="bg-white rounded-xl shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
@@ -245,29 +371,31 @@ export default function SurveyorDashboard() {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['Plot ID', 'Owner', 'Full Location', 'Area', 'Land Use', 'Status', 'Date'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                      ))}
+                      {['Plot ID', 'Owner', 'Full Location', 'Area', 'Land Use', 'Status', 'Date'].map(function(h) {
+                        return <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>;
+                      })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {plots.map(plot => (
-                      <tr key={plot.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{plot.plot_id}</td>
-                        <td className="px-4 py-3 text-sm">{plot.owner_name}</td>
-                        <td className="px-4 py-3 text-sm">{plot.full_location}</td>
-                        <td className="px-4 py-3 text-sm">{plot.area_sqm} m²</td>
-                        <td className="px-4 py-3 text-sm">{plot.land_use}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(plot.status)}`}>
-                            {plot.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {new Date(plot.created_at).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
+                    {plots.map(function(plot) {
+                      return (
+                        <tr key={plot.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-mono text-xs font-medium text-primary">{plot.plot_id}</td>
+                          <td className="px-4 py-3 text-sm">{plot.owner_name}</td>
+                          <td className="px-4 py-3 text-sm">{plot.full_location}</td>
+                          <td className="px-4 py-3 text-sm">{plot.area_sqm} m²</td>
+                          <td className="px-4 py-3 text-sm">{plot.land_use}</td>
+                          <td className="px-4 py-3">
+                            <span className={'px-2 py-1 rounded-full text-xs font-medium ' + statusColor(plot.status)}>
+                              {plot.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500">
+                            {new Date(plot.created_at).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

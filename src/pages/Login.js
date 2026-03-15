@@ -17,9 +17,11 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(email, password);
-      if (user.role === 'ADMIN')             navigate('/admin');
-      else if (user.role === 'SURVEYOR')     navigate('/surveyor');
-      else if (user.role === 'GOV_OFFICIAL') navigate('/official');
+      if (user.role === 'NATIONAL_ADMIN')  navigate('/admin');
+      else if (user.role === 'REGIONAL_DIR')   navigate('/official');
+      else if (user.role === 'DIVISIONAL_OFF') navigate('/official');
+      else if (user.role === 'SUBDIV_OFF')     navigate('/official');
+      else if (user.role === 'SURVEYOR')       navigate('/surveyor');
       else navigate('/buyer');
     } catch {
       setError('Invalid email or password. Please try again.');

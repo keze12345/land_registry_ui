@@ -9,6 +9,8 @@ import BuyerDashboard from './pages/BuyerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import Marketplace from './pages/Marketplace';
 import SellerDashboard from './pages/SellerDashboard';
+import SubdivisionPage from './pages/SubdivisionPage';
+import StaffManagement from './pages/StaffManagement';
 
 const ProtectedRoute = ({ children, roles }) => {
   const { user, loading } = useAuth();
@@ -25,6 +27,8 @@ const ProtectedRoute = ({ children, roles }) => {
   return children;
 };
 
+const GOV_ROLES = ['NATIONAL_ADMIN', 'REGIONAL_DIR', 'DIVISIONAL_OFF', 'SUBDIV_OFF'];
+
 function App() {
   return (
     <AuthProvider>
@@ -33,11 +37,13 @@ function App() {
           <Route path="/login"       element={<Login />} />
           <Route path="/register"    element={<Register />} />
           <Route path="/surveyor"    element={<ProtectedRoute roles={['SURVEYOR']}><SurveyorDashboard /></ProtectedRoute>} />
-          <Route path="/official"    element={<ProtectedRoute roles={['GOV_OFFICIAL']}><OfficialDashboard /></ProtectedRoute>} />
+          <Route path="/official"    element={<ProtectedRoute roles={[...GOV_ROLES]}><OfficialDashboard /></ProtectedRoute>} />
+          <Route path="/staff"       element={<ProtectedRoute roles={[...GOV_ROLES]}><StaffManagement /></ProtectedRoute>} />
           <Route path="/buyer"       element={<ProtectedRoute roles={['BUYER']}><BuyerDashboard /></ProtectedRoute>} />
           <Route path="/seller"      element={<ProtectedRoute roles={['BUYER']}><SellerDashboard /></ProtectedRoute>} />
           <Route path="/marketplace" element={<ProtectedRoute roles={['BUYER']}><Marketplace /></ProtectedRoute>} />
-          <Route path="/admin"       element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/subdivide"   element={<ProtectedRoute roles={['BUYER']}><SubdivisionPage /></ProtectedRoute>} />
+          <Route path="/admin"       element={<ProtectedRoute roles={['NATIONAL_ADMIN']}><AdminDashboard /></ProtectedRoute>} />
           <Route path="*"            element={<Navigate to="/login" />} />
         </Routes>
       </BrowserRouter>
