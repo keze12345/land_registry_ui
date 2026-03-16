@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/land_registry_ui/static/css/main.54919aa1.css",
+    "main.js": "/land_registry_ui/static/js/main.a1ceb397.js",
+    "static/js/453.89908f9e.chunk.js": "/land_registry_ui/static/js/453.89908f9e.chunk.js",
+    "index.html": "/land_registry_ui/index.html",
+    "main.54919aa1.css.map": "/land_registry_ui/static/css/main.54919aa1.css.map",
+    "main.a1ceb397.js.map": "/land_registry_ui/static/js/main.a1ceb397.js.map",
+    "453.89908f9e.chunk.js.map": "/land_registry_ui/static/js/453.89908f9e.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.54919aa1.css",
+    "static/js/main.a1ceb397.js"
+  ]
+}
