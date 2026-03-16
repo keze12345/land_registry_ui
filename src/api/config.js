@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api/v1';
+
 const API = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api/v1',
+  baseURL: BASE_URL,
 });
 
 API.interceptors.request.use((config) => {
@@ -21,7 +23,7 @@ API.interceptors.response.use(
       try {
         const refresh = localStorage.getItem('refresh_token');
         const res = await axios.post(
-          'http://127.0.0.1:8000/api/v1/accounts/token/refresh/',
+          `${BASE_URL}/accounts/token/refresh/`,
           { refresh }
         );
         localStorage.setItem('access_token', res.data.access);
